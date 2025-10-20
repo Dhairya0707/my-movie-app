@@ -654,6 +654,11 @@ export default function HomePage() {
                 return (
                   <button
                     key={genre.name}
+                    onClick={() => {
+                      router.push(
+                        "/search?q=" + encodeURIComponent(genre.name) + " movie"
+                      );
+                    }}
                     className="group relative overflow-hidden rounded-xl p-6 bg-slate-800/30 border-2 border-slate-700/40 hover:border-slate-600 hover:bg-slate-800/50 transition-all"
                   >
                     <div

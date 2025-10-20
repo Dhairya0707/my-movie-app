@@ -957,7 +957,6 @@ export default function MoviePage() {
     </div>
   );
 }
-
 // "use client";
 
 // import { useState, useEffect, useCallback, useMemo } from "react";
@@ -1054,6 +1053,7 @@ export default function MoviePage() {
 //     return { poster: "/placeholder.jpg", backdrop: "/placeholder.jpg" };
 //   }
 //   const fetchUrl = `${TMDB_BASE_URL}${movieId}/images?api_key=${TMDB_API_KEY}`;
+//   console.log("Fetching images from:", fetchUrl);
 //   try {
 //     const response = await fetch(fetchUrl);
 //     if (!response.ok) {
@@ -1091,7 +1091,7 @@ export default function MoviePage() {
 //   movieId: string
 // ): Promise<MovieDetails | null> {
 //   const fetchUrl = `${TMDB_BASE_URL}${movieId}?api_key=${TMDB_API_KEY}&append_to_response=videos,credits,images,recommendations`;
-
+//   console.log("Fetching movie details from 222:", fetchUrl);
 //   try {
 //     const response = await fetch(fetchUrl);
 //     if (!response.ok) throw new Error(`TMDb API Error: ${response.status}`);
