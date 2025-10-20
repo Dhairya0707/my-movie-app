@@ -1,0 +1,1834 @@
+"use client";
+
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import {
+  Film,
+  Search,
+  Heart,
+  Star,
+  Sparkles,
+  Flame,
+  Mic2,
+  Eye,
+  Drama,
+  Rocket,
+  Skull,
+  Clapperboard,
+  Ghost,
+  Mountain,
+  Swords,
+  Play,
+  Plus,
+  TrendingUp,
+  User,
+  Settings,
+  Check, // Import Check icon for 'Liked' state
+} from "lucide-react";
+import { movies } from "./db/movies";
+
+//================================================================================
+// --- TYPE DEFINITIONS & CONSTANTS ---
+//================================================================================
+
+interface Movie {
+  id?: any;
+  movie_id: string;
+  movie_name: string;
+  genre: string;
+  overview: string;
+  director?: string;
+  cast?: string;
+  year: string;
+}
+
+interface HeroMovie extends Movie {
+  backdrop_url: string;
+}
+
+// Local Storage Keys
+const GENRE_STORAGE_KEY = "user_preferred_genres";
+const LIKED_MOVIES_STORAGE_KEY = "user_liked_movie";
+
+// API and Image Configuration (Unchanged)
+const TMDB_API_KEY = "b36a8f5e4e7fd0a175b10384cc76a0ab";
+const TMDB_BASE_URL = "https://api.themoviedb.org/3/movie/";
+const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500/";
+const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original/";
+const FEED_API_ROUTE = "/api/feed";
+
+// --- Utility: getMovieImages (Unchanged) ---
+async function getMovieImages(movieId: string) {
+  if (!movieId) {
+    return { poster: "/placeholder.jpg", backdrop: "/placeholder.jpg" };
+  }
+  const fetchUrl = `${TMDB_BASE_URL}${movieId}/images?api_key=${TMDB_API_KEY}`;
+  // ... (image fetching logic remains the same)
+  try {
+    const response = await fetch(fetchUrl);
+    if (!response.ok) {
+      // throw new Error(`TMDb API Error: ${response.status}`);
+      console.log(`TMDb API Error: ${response.status}`);
+    }
+    const data = await response.json();
+    const posterPath = data.posters?.[0]?.file_path || null;
+    const backdropPath = data.backdrops?.[0]?.file_path || null;
+
+    return {
+      poster: posterPath
+        ? `${POSTER_BASE_URL}${posterPath}`
+        : "/placeholder.jpg",
+      backdrop: backdropPath
+        ? `${BACKDROP_BASE_URL}${backdropPath}`
+        : "/placeholder.jpg",
+    };
+  } catch (error) {
+    console.error("Failed to fetch movie images:", error);
+    return { poster: "/placeholder.jpg", backdrop: "/placeholder.jpg" };
+  }
+}
+
+// --- STATIC DATA (Unchanged) ---
+const heroMovies: Movie[] = [
+  {
+    id: 117,
+    movie_id: "tt7838252",
+    movie_name: "K.G.F: Chapter 1",
+    year: "2018",
+    genre: "Action, Crime, Drama",
+    overview:
+      "In the 1970s, a gangster named Rocky goes undercover as a slave to assassinate the owner of a notorious gold mine known as the K.G.F.",
+    director: "Prashanth Neel",
+    cast: "Yash, Srinidhi Shetty, Ramachandra Raju, Archana Jois",
+  },
+  {
+    movie_id: "1058694",
+    movie_name: "Jawan",
+    genre: "Action, Thriller",
+    overview:
+      "A high-octane action thriller which outlines the emotional journey of a man who is set to rectify the wrongs in the society.",
+    year: "2023",
+  },
+  // {
+  //   movie_id: "848118",
+  //   movie_name: "Fighter",
+  //   genre: "Action, Adventure, Thriller",
+  //   overview: "FIGHTER is India's first aerial action film.",
+  //   year: "2024",
+  // },
+  {
+    id: 89,
+    movie_id: "tt3735246",
+    movie_name: "Bajirao Mastani",
+    year: "2015",
+    genre: "Action, Drama, History",
+    overview:
+      "An account of the romance between the Maratha general, Baji Rao I and Mastani, princess of Bundelkhand.",
+    director: "Sanjay Leela Bhansali",
+    cast: "Ranveer Singh, Deepika Padukone, Priyanka Chopra Jonas, Tanvi Azmi",
+  },
+  {
+    id: 76,
+    movie_id: "tt0461936",
+    movie_name: "Don",
+    year: "2006",
+    genre: "Action, Crime, Thriller",
+    overview:
+      "Vijay is recruited by a police officer to masquerade as his lookalike Don, the leader of an international gang of smugglers. Things go wrong when the officer is killed and Vijay is left to fend for himself.",
+    director: "Farhan Akhtar",
+    cast: "Shah Rukh Khan, Priyanka Chopra Jonas, Arjun Rampal, Isha Koppikar",
+  },
+  // {
+  //   movie_id: "2082197",
+  //   movie_name: "Barfi!",
+  //   genre: "Comedy, Drama, Romance",
+  //   overview:
+  //     "Three young people learn that love can neither be defined nor contained by society's definition.",
+  //   year: "2012",
+  // },
+];
+
+const genres = [
+  { name: "Action", icon: Flame, color: "from-red-500/20 to-orange-600/20" },
+  { name: "Comedy", icon: Mic2, color: "from-yellow-500/20 to-amber-600/20" },
+  { name: "Crime", icon: Eye, color: "from-emerald-500/20 to-green-600/20" },
+  { name: "Drama", icon: Drama, color: "from-violet-500/20 to-purple-600/20" },
+  { name: "Sci-Fi", icon: Rocket, color: "from-cyan-500/20 to-blue-600/20" },
+  { name: "Horror", icon: Skull, color: "from-rose-500/20 to-red-800/20" },
+  { name: "Romance", icon: Heart, color: "from-pink-500/20 to-rose-600/20" },
+  {
+    name: "Animation",
+    icon: Clapperboard,
+    color: "from-green-500/20 to-emerald-600/20",
+  },
+  {
+    name: "Thriller",
+    icon: Ghost,
+    color: "from-indigo-500/20 to-purple-600/20",
+  },
+  {
+    name: "Fantasy",
+    icon: Sparkles,
+    color: "from-purple-500/20 to-fuchsia-600/20",
+  },
+  {
+    name: "Adventure",
+    icon: Mountain,
+    color: "from-teal-500/20 to-cyan-600/20",
+  },
+  { name: "War", icon: Swords, color: "from-amber-500/20 to-orange-600/20" },
+];
+
+//================================================================================
+// --- UI COMPONENTS ---
+//================================================================================
+
+interface MovieCardProps {
+  movie: Movie;
+  router: any;
+  isLiked: boolean;
+  onToggleLike: (movie: Movie) => void;
+}
+
+function MovieCard({ movie, router, isLiked, onToggleLike }: MovieCardProps) {
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const title = movie.movie_name || "Unknown Title";
+  const year = movie.year || "N/A";
+
+  useEffect(() => {
+    async function fetchImage() {
+      const { poster } = await getMovieImages(movie.movie_id);
+      setPosterUrl(poster);
+    }
+    if (movie.movie_id) {
+      fetchImage();
+    }
+  }, [movie.movie_id]);
+
+  if (!posterUrl) {
+    return (
+      <div className="group flex-shrink-0 w-48 animate-pulse">
+        <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800"></div>
+        <div className="mt-3 space-y-2">
+          <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+          <div className="h-3 bg-slate-800 rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
+
+  const likeButtonClasses = isLiked
+    ? "w-9 h-9 rounded-full bg-red-600/90 flex items-center justify-center hover:scale-110 transition-transform shadow-lg border-2 border-red-500" // Liked state: Red/Checked
+    : "w-9 h-9 rounded-full bg-slate-800/95 border-2 border-slate-600 flex items-center justify-center hover:scale-110 transition-transform"; // Unliked state: Grey/Plus
+
+  const likeIcon = isLiked ? (
+    <Check className="w-5 h-5 text-white" strokeWidth={2.5} />
+  ) : (
+    <Plus className="w-4 h-4 text-white" strokeWidth={2.5} />
+  );
+
+  return (
+    <div
+      className="group cursor-pointer flex-shrink-0 w-48"
+      onClick={() => router.push(`/movie/${movie.movie_id}`)} // Main card click redirects to movie details
+    >
+      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800/50 border-2 border-slate-800/50 group-hover:border-slate-700 transition-all">
+        <Image
+          src={posterUrl}
+          alt={title}
+          fill
+          sizes="200px"
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute bottom-0 left-0 right-0 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              {/* Play Button - Redirects to Movie Details */}
+              <button
+                className="w-9 h-9 rounded-full bg-white/95 flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent card click
+                  router.push(`/movie/${movie.movie_id}`);
+                }}
+              >
+                <Play
+                  className="w-4 h-4 text-slate-900 ml-0.5"
+                  fill="currentColor"
+                />
+              </button>
+
+              {/* Add/Remove Button - Toggles Like Status */}
+              <button
+                className={likeButtonClasses}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent card click
+                  onToggleLike(movie);
+                }}
+              >
+                {likeIcon}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 space-y-1">
+        <h3 className="text-slate-200 font-medium truncate group-hover:text-white transition-colors">
+          {title}
+        </h3>
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span>{year}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Other UI components (Loader, EmptyMessage, HeroSkeleton) remain unchanged ---
+const MovieListLoader = () => (
+  <div className="pb-4 -mb-4 overflow-x-auto">
+    <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+      {Array.from({ length: 12 }).map((_, index) => (
+        <div key={index} className="group flex-shrink-0 w-48 animate-pulse">
+          <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800/80"></div>
+          <div className="mt-3 space-y-2">
+            <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+            <div className="h-3 bg-slate-800 rounded w-1/2"></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const EmptyLikesMessage = () => (
+  <div className="flex items-center justify-center h-48 p-8 bg-slate-800/40 rounded-xl border border-slate-700/50">
+    <div className="text-center space-y-3">
+      <Heart className="w-8 h-8 text-red-500 mx-auto" strokeWidth={1.5} />
+      <h3 className="text-xl font-semibold text-slate-100">
+        Unlock Semantic Magic
+      </h3>
+      <p className="text-slate-400 max-w-sm">
+        Like a few movies to get truly personalized, semantically similar
+        recommendations here. Your taste is the key!
+      </p>
+    </div>
+  </div>
+);
+
+const HeroSkeleton = () => (
+  <div className="absolute inset-0 animate-pulse">
+    <div className="absolute inset-0 bg-slate-900/80"></div>
+    <div className="relative h-full max-w-7xl mx-auto px-6 flex items-end pb-20">
+      <div className="max-w-2xl space-y-6">
+        <div className="h-4 w-24 bg-slate-800 rounded-full"></div>
+        <div className="h-16 bg-slate-800 rounded w-full"></div>
+        <div className="h-6 bg-slate-800 rounded w-5/6"></div>
+        <div className="space-y-2">
+          <div className="h-3 bg-slate-800 rounded w-11/12"></div>
+          <div className="h-3 bg-slate-800 rounded w-full"></div>
+        </div>
+        <div className="flex items-center gap-4 pt-4">
+          <div className="h-14 w-40 bg-indigo-700/50 rounded-xl"></div>
+          <div className="h-14 w-40 bg-slate-800/60 rounded-xl border border-slate-700/50"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+//================================================================================
+// --- MAIN HOME PAGE COMPONENT (MODIFIED) ---
+//================================================================================
+export default function HomePage() {
+  const router = useRouter();
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [heroData, setHeroData] = useState<HeroMovie[]>([]);
+  const [isLoadingHero, setIsLoadingHero] = useState(true);
+  const [likedMovies, setLikedMovies] = useState<any>([]);
+  const [genreFeed, setGenreFeed] = useState<Movie[]>([]);
+  const [likesFeed, setLikesFeed] = useState<Movie[]>([]);
+  const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+  // Renamed to explicitly track initial feed fetch completion
+  const hasFetchedFeed = useRef(false);
+
+  // --- Handler for toggling movie like status (Instant UI update + localStorage write) ---
+  const handleToggleLike = useCallback((movieToToggle: Movie) => {
+    setLikedMovies((prevLikedMovies: any) => {
+      const isAlreadyLiked = prevLikedMovies.some(
+        (m: any) => m.movie_id === movieToToggle.movie_id
+      );
+
+      let newLikedMovies: any;
+
+      if (isAlreadyLiked) {
+        // Remove movie
+        newLikedMovies = prevLikedMovies.filter(
+          (m: any) => m.movie_id !== movieToToggle.movie_id
+        );
+      } else {
+        // Add movie, ensuring correct structure
+        const newMovie = {
+          ...movieToToggle,
+          // Assign a unique ID if one doesn't exist, to match the desired format structure
+          id: movieToToggle.id || Date.now().toString(),
+        };
+        newLikedMovies = [...prevLikedMovies, newMovie];
+      }
+
+      // Update localStorage immediately
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          LIKED_MOVIES_STORAGE_KEY,
+          JSON.stringify(newLikedMovies)
+        );
+      }
+      return newLikedMovies;
+    });
+  }, []);
+
+  // Helper to check if a movie is liked
+  const isMovieLiked = useCallback(
+    (movieId: string) => likedMovies.some((m: any) => m.movie_id === movieId),
+    [likedMovies]
+  );
+
+  // --- Redirection Handlers ---
+  const handleGenreSettingsClick = () => router.push("/onboarding");
+  const handleMyListClick = () => router.push("/mylist");
+  const handleMovieDetailClick = (movieId: string) =>
+    router.push(`/movie/${movieId}`);
+
+  // --- Utility to load liked movies from localStorage (Runs only once on mount) ---
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const likedMoviesString = localStorage.getItem(
+          LIKED_MOVIES_STORAGE_KEY
+        );
+        const initialLikedMovies = likedMoviesString
+          ? JSON.parse(likedMoviesString)
+          : [];
+        setLikedMovies(initialLikedMovies);
+      } catch (e) {
+        console.error("❌ Failed to load liked movies:", e);
+        setLikedMovies([]);
+      }
+    }
+  }, []);
+
+  // --- API Fetch Effect for /api/feed (Optimized: Runs only on initial mount) ---
+  useEffect(() => {
+    // We only want to run this once on initial page load
+    if (hasFetchedFeed.current) return;
+    hasFetchedFeed.current = true; // Mark as fetched immediately
+
+    // 1. Fetch current user data from localStorage for the API payload
+    const likedGenresString =
+      typeof window !== "undefined"
+        ? localStorage.getItem(GENRE_STORAGE_KEY)
+        : null;
+    const likedMoviesString =
+      typeof window !== "undefined"
+        ? localStorage.getItem(LIKED_MOVIES_STORAGE_KEY)
+        : null;
+
+    let likedGenres: string[] = [];
+    let likedMoviesForApi: any[] = [];
+
+    try {
+      likedGenres = likedGenresString ? JSON.parse(likedGenresString) : [];
+      likedMoviesForApi = likedMoviesString
+        ? JSON.parse(likedMoviesString)
+        : [];
+
+      // Map liked movies to the required minimal structure for the API call
+      likedMoviesForApi = likedMoviesForApi.map((movie: any) => ({
+        genre: movie.genre,
+        overview: movie.overview,
+        cast: movie.cast,
+        movie_id: movie.movie_id,
+      }));
+    } catch (e) {
+      console.error("Error parsing data from localStorage:", e);
+    }
+
+    if (!likedGenres || likedGenres.length === 0) {
+      if (typeof window !== "undefined") {
+        router.push("/onboarding");
+      }
+      // Since we marked it fetched, we reset loading state if we redirect
+      setIsLoadingFeed(false);
+      return;
+    }
+
+    async function fetchMovieFeed(genres: string[], movies: any[]) {
+      setIsLoadingFeed(true);
+      try {
+        const payload = {
+          likedGenres: genres,
+          likedMovies: movies,
+        };
+        const response = await fetch(FEED_API_ROUTE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch feed: ${response.statusText}`);
+        }
+
+        const data: { likedByGenre: Movie[]; likedByLikes: Movie[] } =
+          await response.json();
+
+        setGenreFeed(data.likedByGenre || []);
+        setLikesFeed(data.likedByLikes || []);
+      } catch (error) {
+        console.error("Error fetching home feed:", error);
+        setGenreFeed([]);
+        setLikesFeed([]);
+      } finally {
+        setIsLoadingFeed(false);
+      }
+    }
+
+    // Only run the fetch once on initial page load
+    fetchMovieFeed(likedGenres, likedMoviesForApi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]); // DEPENDENCY ARRAY ONLY CONTAINS ROUTER
+
+  // --- Hero Section Data Fetch and Slider Logic (Unchanged) ---
+  useEffect(() => {
+    async function fetchHeroData() {
+      setIsLoadingHero(true);
+      const dataWithImages = await Promise.all(
+        heroMovies.map(async (movie) => {
+          const { backdrop } = await getMovieImages(movie.movie_id);
+          return {
+            ...movie,
+            backdrop_url: backdrop,
+            title: movie.movie_name || "Featured Movie",
+            overview: movie.overview || "No summary available.",
+            year: movie.year || "N/A",
+            genre: movie.genre || "N/A",
+          };
+        })
+      );
+      setHeroData(dataWithImages as HeroMovie[]);
+      setIsLoadingHero(false);
+    }
+    fetchHeroData();
+  }, []);
+
+  // Hero slider interval
+  useEffect(() => {
+    if (heroData.length === 0) return;
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % heroData.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [heroData.length]);
+
+  // Nav scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const currentMovie = useMemo(
+    () => heroData[currentSlide],
+    [heroData, currentSlide]
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      {/* Background and Navigation (unchanged) */}
+      <div className="fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/10 via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-violet-900/10 via-transparent to-transparent"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+      </div>
+
+      {/* --- REFINED NAVIGATION BAR --- */}
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          isScrolled
+            ? "bg-slate-950/95 backdrop-blur-xl border-b border-slate-800/50 shadow-lg"
+            : "bg-transparent"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Film className="w-8 h-8 text-indigo-400" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                </div>
+                <span className="text-2xl font-bold bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent">
+                  Recommendo
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleMyListClick}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium transition-all"
+              >
+                <Heart className="w-4 h-4" />
+                My List
+              </button>
+              <button className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/50 transition-all">
+                <Search className="w-5 h-5" />
+              </button>
+
+              <button className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold hover:scale-105 transition-transform">
+                <User className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <main className="relative z-10 pt-20">
+        {/* --- MODIFIED HERO SECTION (with Toggle Like Logic) --- */}
+        <section className="relative h-[91vh] overflow-hidden">
+          {isLoadingHero ? (
+            <HeroSkeleton />
+          ) : (
+            heroData.map((movie, index) => {
+              const liked = isMovieLiked(movie.movie_id);
+              const likeButtonClasses = liked
+                ? "flex items-center gap-3 px-8 py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                : "flex items-center gap-3 px-8 py-4 bg-slate-800/60 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all backdrop-blur-sm border border-slate-700/50 hover:scale-105";
+
+              return (
+                <div
+                  key={movie.movie_id}
+                  className={`absolute inset-0 transition-opacity duration-1000 ${
+                    index === currentSlide ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <div className="absolute inset-0">
+                    <Image
+                      src={movie.backdrop_url}
+                      alt={movie.movie_name}
+                      fill
+                      priority={index === 0}
+                      className="object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent"></div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
+                  </div>
+                  <div className="relative h-full max-w-7xl mx-auto px-6 flex items-end pb-20">
+                    <div className="max-w-2xl space-y-6">
+                      <div className="flex items-center gap-3">
+                        <div className="px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 backdrop-blur-sm">
+                          <span className="text-indigo-300 text-sm font-medium">
+                            Featured
+                          </span>
+                        </div>
+                        <span className="text-slate-400 text-sm font-medium">
+                          {movie.year || "Unknown"}
+                        </span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-400 text-sm">
+                          {movie.genre.split(",")[0] || "Unknown"}
+                        </span>
+                      </div>
+                      <h1 className="text-5xl md:text-7xl font-bold bg-gradient-to-br from-slate-50 via-slate-200 to-slate-400 bg-clip-text text-transparent leading-tight">
+                        {movie.movie_name || "Unknown Title"}
+                      </h1>
+                      <p className="text-slate-300 text-lg leading-relaxed line-clamp-2">
+                        {movie.overview || "No summary available."}
+                      </p>
+                      <div className="flex items-center gap-4 pt-4">
+                        <button
+                          onClick={() => handleMovieDetailClick(movie.movie_id)}
+                          className="flex items-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-xl font-semibold hover:bg-slate-100 transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                        >
+                          <Play className="w-5 h-5" fill="currentColor" />
+                          See Details
+                        </button>
+
+                        {/* My List Button (Hero) - NOW HAS TOGGLE LOGIC */}
+                        <button
+                          onClick={() => handleToggleLike(movie)}
+                          className={likeButtonClasses}
+                        >
+                          {liked ? (
+                            <Check className="w-5 h-5" />
+                          ) : (
+                            <Plus className="w-5 h-5" />
+                          )}
+                          {liked ? "Remove from List" : "My List"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {/* Slider Controls only show after loading */}
+          {heroData.length > 0 && (
+            <div className="absolute bottom-8 right-8 flex gap-2">
+              {heroData.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentSlide(index)}
+                  className={`h-1 rounded-full transition-all ${
+                    index === currentSlide
+                      ? "w-8 bg-indigo-400"
+                      : "w-6 bg-slate-600 hover:bg-slate-500"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* --- DYNAMIC MOVIE LIST SECTION 1: likedByGenre --- */}
+        <section className="py-12 px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="w-6 h-6 text-indigo-400" />
+                <h2 className="text-2xl font-semibold text-slate-200">
+                  Based on Your Preferred Genres
+                </h2>
+              </div>
+
+              {/* Change Genres Button */}
+              <button
+                onClick={handleGenreSettingsClick}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 bg-slate-800/50 hover:text-indigo-400 hover:bg-slate-800 transition-all border border-slate-700/50 text-sm font-medium"
+              >
+                <Settings className="w-4 h-4" />
+                Change Genres
+              </button>
+            </div>
+            {isLoadingFeed ? (
+              <MovieListLoader />
+            ) : (
+              <div className="pb-4 -mb-4 overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent">
+                <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+                  {genreFeed.map((movie) => (
+                    <MovieCard
+                      key={movie.movie_id}
+                      movie={movie}
+                      router={router}
+                      isLiked={isMovieLiked(movie.movie_id)}
+                      onToggleLike={handleToggleLike}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* --- DYNAMIC MOVIE LIST SECTION 2: likedByLikes --- */}
+        <section className="py-12 px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-violet-400" />
+                <h2 className="text-2xl font-semibold text-slate-200">
+                  Semantic Recommendations
+                </h2>
+              </div>
+            </div>
+            {isLoadingFeed ? (
+              <MovieListLoader />
+            ) : likesFeed.length === 0 ? (
+              <EmptyLikesMessage />
+            ) : (
+              <div className="pb-4 -mb-4 overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent">
+                <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+                  {likesFeed.map((movie) => (
+                    <MovieCard
+                      key={movie.movie_id}
+                      movie={movie}
+                      router={router}
+                      isLiked={isMovieLiked(movie.movie_id)}
+                      onToggleLike={handleToggleLike}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Genre Section (static - unchanged) */}
+        <section className="py-12 px-6">
+          <div className="max-w-7xl mx-auto">
+            <h2 className="text-2xl font-semibold text-slate-200 mb-8">
+              Browse by Genre
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {genres.map((genre) => {
+                const IconComponent = genre.icon;
+                return (
+                  <button
+                    key={genre.name}
+                    className="group relative overflow-hidden rounded-xl p-6 bg-slate-800/30 border-2 border-slate-700/40 hover:border-slate-600 hover:bg-slate-800/50 transition-all"
+                  >
+                    <div
+                      className={`absolute inset-0 bg-gradient-to-br ${genre.color} opacity-0 group-hover:opacity-100 transition-opacity`}
+                    ></div>
+                    <div className="relative flex flex-col items-center gap-3">
+                      <IconComponent className="w-8 h-8 text-slate-400 group-hover:text-slate-200 transition-colors" />
+                      <span className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+                        {genre.name}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* Footer (unchanged) */}
+        <footer className="py-12 px-6 mt-12 border-t border-slate-800/50">
+          <div className="max-w-7xl mx-auto text-center text-slate-500">
+            <p>Recommendo © 2025 • Your Personal Movie Companion</p>
+          </div>
+        </footer>
+      </main>
+    </div>
+  );
+}
+// "use client";
+
+// import { useState, useEffect, useMemo } from "react";
+// import Image from "next/image";
+// import { useRouter } from "next/navigation";
+// import {
+//   Film,
+//   Search,
+//   Heart,
+//   Star,
+//   Sparkles,
+//   Flame,
+//   Mic2,
+//   Eye,
+//   Drama,
+//   Rocket,
+//   Skull,
+//   Clapperboard,
+//   Ghost,
+//   Mountain,
+//   Swords,
+//   Play,
+//   Plus,
+//   TrendingUp,
+//   User,
+//   Settings, // Import the Settings icon
+// } from "lucide-react";
+
+// //================================================================================
+// // --- TYPE DEFINITIONS & CONSTANTS ---
+// //================================================================================
+
+// interface Movie {
+//   movie_id: string;
+//   movie_name: string;
+//   genre: string;
+//   overview: string;
+//   director?: string;
+//   cast?: string;
+//   year: string;
+// }
+
+// interface HeroMovie extends Movie {
+//   backdrop_url: string;
+// }
+
+// // Local Storage Keys
+// const GENRE_STORAGE_KEY = "user_preferred_genres";
+// const LIKED_MOVIES_STORAGE_KEY = "user_liked_movie";
+
+// // API and Image Configuration (Unchanged)
+// const TMDB_API_KEY = "b36a8f5e4e7fd0a175b10384cc76a0ab";
+// const TMDB_BASE_URL = "https://api.themoviedb.org/3/movie/";
+// const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w500/";
+// const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/original/";
+// const FEED_API_ROUTE = "/api/feed";
+
+// // --- Utility: getMovieImages (Unchanged) ---
+// async function getMovieImages(movieId: string) {
+//   if (!movieId) {
+//     return { poster: "/placeholder.jpg", backdrop: "/placeholder.jpg" };
+//   }
+//   const fetchUrl = `${TMDB_BASE_URL}${movieId}/images?api_key=${TMDB_API_KEY}`;
+//   try {
+//     const response = await fetch(fetchUrl);
+//     if (!response.ok) {
+//       throw new Error(`TMDb API Error: ${response.status}`);
+//     }
+//     const data = await response.json();
+//     const posterPath = data.posters?.[0]?.file_path || null;
+//     const backdropPath = data.backdrops?.[0]?.file_path || null;
+
+//     return {
+//       poster: posterPath
+//         ? `${POSTER_BASE_URL}${posterPath}`
+//         : "/placeholder.jpg",
+//       backdrop: backdropPath
+//         ? `${BACKDROP_BASE_URL}${backdropPath}`
+//         : "/placeholder.jpg",
+//     };
+//   } catch (error) {
+//     console.error("Failed to fetch movie images:", error);
+//     return { poster: "/placeholder.jpg", backdrop: "/placeholder.jpg" };
+//   }
+// }
+
+// // --- STATIC DATA (FOR SECTIONS THAT REMAIN STATIC) ---
+// const heroMovies: Movie[] = [
+//   {
+//     movie_id: "1058694",
+//     movie_name: "Jawan",
+//     genre: "Action, Thriller",
+//     overview:
+//       "A high-octane action thriller which outlines the emotional journey of a man who is set to rectify the wrongs in the society.",
+//     year: "2023",
+//   },
+//   {
+//     movie_id: "848118",
+//     movie_name: "Fighter",
+//     genre: "Action, Adventure, Thriller",
+//     overview: "FIGHTER is India's first aerial action film.",
+//     year: "2024",
+//   },
+//   {
+//     movie_id: "7430722",
+//     movie_name: "War",
+//     genre: "Action, Adventure, Thriller",
+//     overview:
+//       "Indian agent Khalid goes on a mission to hunt and eliminate his former mentor.",
+//     year: "2019",
+//   },
+//   {
+//     movie_id: "2082197",
+//     movie_name: "Barfi!",
+//     genre: "Comedy, Drama, Romance",
+//     overview:
+//       "Three young people learn that love can neither be defined nor contained by society's definition.",
+//     year: "2012",
+//   },
+// ];
+
+// const genres = [
+//   { name: "Action", icon: Flame, color: "from-red-500/20 to-orange-600/20" },
+//   { name: "Comedy", icon: Mic2, color: "from-yellow-500/20 to-amber-600/20" },
+//   { name: "Crime", icon: Eye, color: "from-emerald-500/20 to-green-600/20" },
+//   { name: "Drama", icon: Drama, color: "from-violet-500/20 to-purple-600/20" },
+//   { name: "Sci-Fi", icon: Rocket, color: "from-cyan-500/20 to-blue-600/20" },
+//   { name: "Horror", icon: Skull, color: "from-rose-500/20 to-red-800/20" },
+//   { name: "Romance", icon: Heart, color: "from-pink-500/20 to-rose-600/20" },
+//   {
+//     name: "Animation",
+//     icon: Clapperboard,
+//     color: "from-green-500/20 to-emerald-600/20",
+//   },
+//   {
+//     name: "Thriller",
+//     icon: Ghost,
+//     color: "from-indigo-500/20 to-purple-600/20",
+//   },
+//   {
+//     name: "Fantasy",
+//     icon: Sparkles,
+//     color: "from-purple-500/20 to-fuchsia-600/20",
+//   },
+//   {
+//     name: "Adventure",
+//     icon: Mountain,
+//     color: "from-teal-500/20 to-cyan-600/20",
+//   },
+//   { name: "War", icon: Swords, color: "from-amber-500/20 to-orange-600/20" },
+// ];
+
+// //================================================================================
+// // --- UI COMPONENTS (UNCHANGED) ---
+// //================================================================================
+
+// function MovieCard({ movie }: { movie: Movie }) {
+//   const [posterUrl, setPosterUrl] = useState<string | null>(null);
+//   const title = movie.movie_name || "Unknown Title";
+//   const year = movie.year || "N/A";
+
+//   useEffect(() => {
+//     async function fetchImage() {
+//       const { poster } = await getMovieImages(movie.movie_id);
+//       setPosterUrl(poster);
+//     }
+//     if (movie.movie_id) {
+//       fetchImage();
+//     }
+//   }, [movie.movie_id]);
+
+//   if (!posterUrl) {
+//     return (
+//       <div className="group flex-shrink-0 w-48 animate-pulse">
+//         <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800"></div>
+//         <div className="mt-3 space-y-2">
+//           <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+//           <div className="h-3 bg-slate-800 rounded w-1/2"></div>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="group cursor-pointer flex-shrink-0 w-48">
+//       <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800/50 border-2 border-slate-800/50 group-hover:border-slate-700 transition-all">
+//         <Image
+//           src={posterUrl}
+//           alt={title}
+//           fill
+//           sizes="200px"
+//           className="object-cover group-hover:scale-105 transition-transform duration-300"
+//         />
+//         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+//           <div className="absolute bottom-0 left-0 right-0 p-4">
+//             <div className="flex items-center gap-2 mb-2">
+//               <button className="w-9 h-9 rounded-full bg-white/95 flex items-center justify-center hover:scale-110 transition-transform shadow-lg">
+//                 <Play
+//                   className="w-4 h-4 text-slate-900 ml-0.5"
+//                   fill="currentColor"
+//                 />
+//               </button>
+//               <button className="w-9 h-9 rounded-full bg-slate-800/95 border-2 border-slate-600 flex items-center justify-center hover:scale-110 transition-transform">
+//                 <Plus className="w-4 h-4 text-white" strokeWidth={2.5} />
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//       <div className="mt-3 space-y-1">
+//         <h3 className="text-slate-200 font-medium truncate group-hover:text-white transition-colors">
+//           {title}
+//         </h3>
+//         <div className="flex items-center gap-2 text-xs text-slate-400">
+//           <span>{year}</span>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+// const MovieListLoader = () => (
+//   <div className="pb-4 -mb-4 overflow-x-auto">
+//     <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+//       {Array.from({ length: 12 }).map((_, index) => (
+//         <div key={index} className="group flex-shrink-0 w-48 animate-pulse">
+//           <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-slate-800/80"></div>
+//           <div className="mt-3 space-y-2">
+//             <div className="h-4 bg-slate-800 rounded w-3/4"></div>
+//             <div className="h-3 bg-slate-800 rounded w-1/2"></div>
+//           </div>
+//         </div>
+//       ))}
+//     </div>
+//   </div>
+// );
+
+// const EmptyLikesMessage = () => (
+//   <div className="flex items-center justify-center h-48 p-8 bg-slate-800/40 rounded-xl border border-slate-700/50">
+//     <div className="text-center space-y-3">
+//       <Heart className="w-8 h-8 text-red-500 mx-auto" strokeWidth={1.5} />
+//       <h3 className="text-xl font-semibold text-slate-100">
+//         Unlock Semantic Magic
+//       </h3>
+//       <p className="text-slate-400 max-w-sm">
+//         Like a few movies to get truly personalized, semantically similar
+//         recommendations here. Your taste is the key!
+//       </p>
+//     </div>
+//   </div>
+// );
+
+// const HeroSkeleton = () => (
+//   <div className="absolute inset-0 animate-pulse">
+//     <div className="absolute inset-0 bg-slate-900/80"></div>
+//     <div className="relative h-full max-w-7xl mx-auto px-6 flex items-end pb-20">
+//       <div className="max-w-2xl space-y-6">
+//         <div className="h-4 w-24 bg-slate-800 rounded-full"></div>
+//         <div className="h-16 bg-slate-800 rounded w-full"></div>
+//         <div className="h-6 bg-slate-800 rounded w-5/6"></div>
+//         <div className="space-y-2">
+//           <div className="h-3 bg-slate-800 rounded w-11/12"></div>
+//           <div className="h-3 bg-slate-800 rounded w-full"></div>
+//         </div>
+//         <div className="flex items-center gap-4 pt-4">
+//           <div className="h-14 w-40 bg-indigo-700/50 rounded-xl"></div>
+//           <div className="h-14 w-40 bg-slate-800/60 rounded-xl border border-slate-700/50"></div>
+//         </div>
+//       </div>
+//     </div>
+//   </div>
+// );
+
+// //================================================================================
+// // --- MAIN HOME PAGE COMPONENT (MODIFIED) ---
+// //================================================================================
+// export default function HomePage() {
+//   const router = useRouter();
+//   const [currentSlide, setCurrentSlide] = useState(0);
+//   const [isScrolled, setIsScrolled] = useState(false);
+//   const [heroData, setHeroData] = useState<HeroMovie[]>([]);
+//   const [isLoadingHero, setIsLoadingHero] = useState(true);
+
+//   const [genreFeed, setGenreFeed] = useState<Movie[]>([]);
+//   const [likesFeed, setLikesFeed] = useState<Movie[]>([]);
+//   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+
+//   // Function to handle redirection to the onboarding page
+//   const handleGenreSettingsClick = () => {
+//     router.push("/onboarding");
+//   };
+
+//   // --- API Fetch Effect for /api/feed (Unchanged logic) ---
+//   useEffect(() => {
+//     const likedGenresString =
+//       typeof window !== "undefined"
+//         ? localStorage.getItem(GENRE_STORAGE_KEY)
+//         : null;
+//     const likedMoviesString =
+//       typeof window !== "undefined"
+//         ? localStorage.getItem(LIKED_MOVIES_STORAGE_KEY)
+//         : null;
+
+//     let likedGenres: string[] = [];
+//     let likedMovies: any[] = [];
+
+//     try {
+//       likedGenres = likedGenresString ? JSON.parse(likedGenresString) : [];
+//       likedMovies = likedMoviesString ? JSON.parse(likedMoviesString) : [];
+//     } catch (e) {
+//       console.error("Error parsing data from localStorage:", e);
+//     }
+
+//     if (!likedGenres || likedGenres.length === 0) {
+//       if (typeof window !== "undefined") {
+//         router.push("/onboarding");
+//       }
+//       return;
+//     }
+
+//     async function fetchMovieFeed(genres: string[], movies: any[]) {
+//       setIsLoadingFeed(true);
+//       try {
+//         const payload = {
+//           likedGenres: genres,
+//           likedMovies: movies,
+//         };
+
+//         const response = await fetch(FEED_API_ROUTE, {
+//           method: "POST",
+//           headers: {
+//             "Content-Type": "application/json",
+//           },
+//           body: JSON.stringify(payload),
+//         });
+
+//         if (!response.ok) {
+//           throw new Error(`Failed to fetch feed: ${response.statusText}`);
+//         }
+
+//         const data: { likedByGenre: Movie[]; likedByLikes: Movie[] } =
+//           await response.json();
+
+//         setGenreFeed(data.likedByGenre || []);
+//         setLikesFeed(data.likedByLikes || []);
+//       } catch (error) {
+//         console.error("Error fetching home feed:", error);
+//         setGenreFeed([]);
+//         setLikesFeed([]);
+//       } finally {
+//         setIsLoadingFeed(false);
+//       }
+//     }
+
+//     fetchMovieFeed(likedGenres, likedMovies);
+//   }, [router]);
+
+//   // --- Hero Section Data Fetch and Slider Logic (Unchanged logic) ---
+//   useEffect(() => {
+//     async function fetchHeroData() {
+//       setIsLoadingHero(true);
+//       const dataWithImages = await Promise.all(
+//         heroMovies.map(async (movie) => {
+//           const { backdrop } = await getMovieImages(movie.movie_id);
+//           return {
+//             ...movie,
+//             backdrop_url: backdrop,
+//             title: movie.movie_name || "Featured Movie",
+//             overview: movie.overview || "No summary available.",
+//             year: movie.year || "N/A",
+//             genre: movie.genre || "N/A",
+//           };
+//         })
+//       );
+//       setHeroData(dataWithImages);
+//       setIsLoadingHero(false);
+//     }
+//     fetchHeroData();
+//   }, []);
+
+//   // Hero slider interval
+//   useEffect(() => {
+//     if (heroData.length === 0) return;
+//     const interval = setInterval(() => {
+//       setCurrentSlide((prev) => (prev + 1) % heroData.length);
+//     }, 5000);
+//     return () => clearInterval(interval);
+//   }, [heroData.length]);
+
+//   // Nav scroll effect
+//   useEffect(() => {
+//     const handleScroll = () => {
+//       setIsScrolled(window.scrollY > 50);
+//     };
+//     window.addEventListener("scroll", handleScroll);
+//     return () => window.removeEventListener("scroll", handleScroll);
+//   }, []);
+
+//   const currentMovie = useMemo(
+//     () => heroData[currentSlide],
+//     [heroData, currentSlide]
+//   );
+
+//   return (
+//     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+//       {/* Background and Navigation (unchanged) */}
+//       <div className="fixed inset-0 z-0">
+//         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/10 via-transparent to-transparent"></div>
+//         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-violet-900/10 via-transparent to-transparent"></div>
+//         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+//       </div>
+
+//       {/* --- REFINED NAVIGATION BAR (Unchanged) --- */}
+//       <nav
+//         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+//           isScrolled
+//             ? "bg-slate-950/95 backdrop-blur-xl border-b border-slate-800/50 shadow-lg"
+//             : "bg-transparent"
+//         }`}
+//       >
+//         <div className="max-w-7xl mx-auto px-6 py-4">
+//           <div className="flex items-center justify-between">
+//             <div className="flex items-center gap-8">
+//               <div className="flex items-center gap-3">
+//                 <div className="relative">
+//                   <Film className="w-8 h-8 text-indigo-400" />
+//                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+//                 </div>
+//                 <span className="text-2xl font-bold bg-gradient-to-r from-slate-100 to-slate-400 bg-clip-text text-transparent">
+//                   Recommendo
+//                 </span>
+//               </div>
+//             </div>
+//             <div className="flex items-center gap-3">
+//               <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 font-medium transition-all">
+//                 <Heart className="w-4 h-4" />
+//                 My List
+//               </button>
+//               <button className="p-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/50 transition-all">
+//                 <Search className="w-5 h-5" />
+//               </button>
+
+//               <button className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold hover:scale-105 transition-transform">
+//                 <User className="w-5 h-5" />
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+//       </nav>
+
+//       <main className="relative z-10 pt-20">
+//         {/* --- MODIFIED HERO SECTION (with Skeleton) --- */}
+//         <section className="relative h-[90vh] overflow-hidden">
+//           {isLoadingHero ? (
+//             <HeroSkeleton />
+//           ) : (
+//             heroData.map((movie, index) => (
+//               <div
+//                 key={movie.movie_id}
+//                 className={`absolute inset-0 transition-opacity duration-1000 ${
+//                   index === currentSlide ? "opacity-100" : "opacity-0"
+//                 }`}
+//               >
+//                 <div className="absolute inset-0">
+//                   <Image
+//                     src={movie.backdrop_url}
+//                     alt={movie.movie_name}
+//                     fill
+//                     priority={index === 0}
+//                     className="object-cover"
+//                   />
+//                   <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-transparent"></div>
+//                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
+//                 </div>
+//                 <div className="relative h-full max-w-7xl mx-auto px-6 flex items-end pb-20">
+//                   <div className="max-w-2xl space-y-6">
+//                     <div className="flex items-center gap-3">
+//                       <div className="px-3 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 backdrop-blur-sm">
+//                         <span className="text-indigo-300 text-sm font-medium">
+//                           Featured
+//                         </span>
+//                       </div>
+//                       <span className="text-slate-400 text-sm font-medium">
+//                         {movie.year || "Unknown"}
+//                       </span>
+//                       <span className="text-slate-500">•</span>
+//                       <span className="text-slate-400 text-sm">
+//                         {movie.genre.split(",")[0] || "Unknown"}
+//                       </span>
+//                     </div>
+//                     <h1 className="text-5xl md:text-7xl font-bold bg-gradient-to-br from-slate-50 via-slate-200 to-slate-400 bg-clip-text text-transparent leading-tight">
+//                       {movie.movie_name || "Unknown Title"}
+//                     </h1>
+//                     <p className="text-slate-300 text-lg leading-relaxed line-clamp-2">
+//                       {movie.overview || "No summary available."}
+//                     </p>
+//                     <div className="flex items-center gap-4 pt-4">
+//                       <button className="flex items-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-xl font-semibold hover:bg-slate-100 transition-all shadow-lg hover:shadow-xl hover:scale-105">
+//                         <Play className="w-5 h-5" fill="currentColor" />
+//                         See Details
+//                       </button>
+//                       <button className="flex items-center gap-3 px-8 py-4 bg-slate-800/60 text-white rounded-xl font-semibold hover:bg-slate-800 transition-all backdrop-blur-sm border border-slate-700/50 hover:scale-105">
+//                         <Plus className="w-5 h-5" />
+//                         My List
+//                       </button>
+//                     </div>
+//                   </div>
+//                 </div>
+//               </div>
+//             ))
+//           )}
+//           {/* Slider Controls only show after loading */}
+//           {heroData.length > 0 && (
+//             <div className="absolute bottom-8 right-8 flex gap-2">
+//               {heroData.map((_, index) => (
+//                 <button
+//                   key={index}
+//                   onClick={() => setCurrentSlide(index)}
+//                   className={`h-1 rounded-full transition-all ${
+//                     index === currentSlide
+//                       ? "w-8 bg-indigo-400"
+//                       : "w-6 bg-slate-600 hover:bg-slate-500"
+//                   }`}
+//                 />
+//               ))}
+//             </div>
+//           )}
+//         </section>
+
+//         {/* --- DYNAMIC MOVIE LIST SECTION 1: likedByGenre (With new button) --- */}
+//         <section className="py-12 px-6">
+//           <div className="max-w-7xl mx-auto">
+//             <div className="flex items-center justify-between mb-6">
+//               <div className="flex items-center gap-3">
+//                 <TrendingUp className="w-6 h-6 text-indigo-400" />
+//                 <h2 className="text-2xl font-semibold text-slate-200">
+//                   Based on Your Preferred Genres
+//                 </h2>
+//               </div>
+
+//               {/* --- NEW: Change Genres Button --- */}
+//               <button
+//                 onClick={handleGenreSettingsClick}
+//                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 bg-slate-800/50 hover:text-indigo-400 hover:bg-slate-800 transition-all border border-slate-700/50 text-sm font-medium"
+//               >
+//                 <Settings className="w-4 h-4" />
+//                 Change Genres
+//               </button>
+//               {/* --- END NEW BUTTON --- */}
+//             </div>
+//             {isLoadingFeed ? (
+//               <MovieListLoader />
+//             ) : (
+//               // SCROLLBAR CHANGE: Applied `scrollbar-thumb-indigo-500`
+//               <div className="pb-4 -mb-4 overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent">
+//                 <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+//                   {genreFeed.map((movie) => (
+//                     <MovieCard key={movie.movie_id} movie={movie} />
+//                   ))}
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         </section>
+
+//         {/* --- DYNAMIC MOVIE LIST SECTION 2: likedByLikes (Unchanged) --- */}
+//         <section className="py-12 px-6">
+//           <div className="max-w-7xl mx-auto">
+//             <div className="flex items-center justify-between mb-6">
+//               <div className="flex items-center gap-3">
+//                 <Sparkles className="w-6 h-6 text-violet-400" />
+//                 <h2 className="text-2xl font-semibold text-slate-200">
+//                   Semantic Recommendations
+//                 </h2>
+//               </div>
+//             </div>
+//             {isLoadingFeed ? (
+//               <MovieListLoader />
+//             ) : likesFeed.length === 0 ? (
+//               <EmptyLikesMessage />
+//             ) : (
+//               <div className="pb-4 -mb-4 overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent">
+//                 <div className="grid grid-rows-2 grid-flow-col-dense gap-5 w-max">
+//                   {likesFeed.map((movie) => (
+//                     <MovieCard key={movie.movie_id} movie={movie} />
+//                   ))}
+//                 </div>
+//               </div>
+//             )}
+//           </div>
+//         </section>
+
+//         {/* Genre Section (static - unchanged) */}
+//         <section className="py-12 px-6">
+//           <div className="max-w-7xl mx-auto">
+//             <h2 className="text-2xl font-semibold text-slate-200 mb-8">
+//               Browse by Genre
+//             </h2>
+//             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+//               {genres.map((genre) => {
+//                 const IconComponent = genre.icon;
+//                 return (
+//                   <button
+//                     key={genre.name}
+//                     className="group relative overflow-hidden rounded-xl p-6 bg-slate-800/30 border-2 border-slate-700/40 hover:border-slate-600 hover:bg-slate-800/50 transition-all"
+//                   >
+//                     <div
+//                       className={`absolute inset-0 bg-gradient-to-br ${genre.color} opacity-0 group-hover:opacity-100 transition-opacity`}
+//                     ></div>
+//                     <div className="relative flex flex-col items-center gap-3">
+//                       <IconComponent className="w-8 h-8 text-slate-400 group-hover:text-slate-200 transition-colors" />
+//                       <span className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">
+//                         {genre.name}
+//                       </span>
+//                     </div>
+//                   </button>
+//                 );
+//               })}
+//             </div>
+//           </div>
+//         </section>
+
+//         {/* Footer (unchanged) */}
+//         <footer className="py-12 px-6 mt-12 border-t border-slate-800/50">
+//           <div className="max-w-7xl mx-auto text-center text-slate-500">
+//             <p>Recommendo © 2025 • Your Personal Movie Companion</p>
+//           </div>
+//         </footer>
+//       </main>
+//     </div>
+//   );
+// }
+
+
+
+
+
+
+
+
+
+----------------------------------onboarding--------------------
+
+// // src/app/page.tsx
+// "use client";
+
+// import { useState, FC } from "react";
+// import { useRouter } from "next/navigation";
+// import {
+//   Film,
+//   Sparkles,
+//   Star,
+//   Flame,
+//   Mic2,
+//   Eye,
+//   Drama,
+//   Rocket,
+//   Skull,
+//   Heart,
+//   Clapperboard,
+//   Ghost,
+//   Mountain,
+//   Swords,
+// } from "lucide-react";
+
+// interface Genre {
+//   name: string;
+//   icon: any;
+//   colorKey: ColorKey;
+// }
+
+// type ColorKey =
+//   | "red"
+//   | "yellow"
+//   | "emerald"
+//   | "violet"
+//   | "cyan"
+//   | "rose"
+//   | "pink"
+//   | "orange"
+//   | "indigo"
+//   | "purple"
+//   | "teal"
+//   | "amber";
+
+// const genres: Genre[] = [
+//   { name: "Action", icon: Flame, colorKey: "red" },
+//   { name: "Adventure", icon: Mountain, colorKey: "teal" },
+//   { name: "Animation", icon: Clapperboard, colorKey: "orange" },
+//   { name: "Comedy", icon: Mic2, colorKey: "yellow" },
+//   { name: "Crime", icon: Eye, colorKey: "emerald" },
+//   { name: "Drama", icon: Drama, colorKey: "violet" },
+//   { name: "Fantasy", icon: Sparkles, colorKey: "purple" },
+//   { name: "Horror", icon: Skull, colorKey: "rose" },
+//   { name: "Romance", icon: Heart, colorKey: "pink" },
+//   { name: "Sci-Fi", icon: Rocket, colorKey: "cyan" },
+//   { name: "Thriller", icon: Ghost, colorKey: "indigo" },
+//   { name: "Family", icon: Star, colorKey: "amber" },
+//   { name: "Mystery", icon: Clapperboard, colorKey: "purple" },
+//   { name: "Music", icon: Mic2, colorKey: "pink" },
+//   { name: "War", icon: Swords, colorKey: "red" },
+// ];
+
+// const colorMap: Record<
+//   ColorKey,
+//   { bg: string; border: string; icon: string; dot: string; hoverGlow?: string }
+// > = {
+//   red: {
+//     bg: "bg-red-500/15",
+//     border: "border-red-400/40",
+//     icon: "text-red-300",
+//     dot: "bg-red-400",
+//     hoverGlow: "ring-red-400/30",
+//   },
+//   yellow: {
+//     bg: "bg-yellow-400/12",
+//     border: "border-yellow-300/30",
+//     icon: "text-yellow-300",
+//     dot: "bg-yellow-300",
+//     hoverGlow: "ring-yellow-300/25",
+//   },
+//   emerald: {
+//     bg: "bg-emerald-500/12",
+//     border: "border-emerald-400/30",
+//     icon: "text-emerald-300",
+//     dot: "bg-emerald-400",
+//     hoverGlow: "ring-emerald-400/25",
+//   },
+//   violet: {
+//     bg: "bg-violet-500/12",
+//     border: "border-violet-400/30",
+//     icon: "text-violet-300",
+//     dot: "bg-violet-400",
+//     hoverGlow: "ring-violet-400/25",
+//   },
+//   cyan: {
+//     bg: "bg-cyan-500/12",
+//     border: "border-cyan-400/30",
+//     icon: "text-cyan-300",
+//     dot: "bg-cyan-400",
+//     hoverGlow: "ring-cyan-400/25",
+//   },
+//   rose: {
+//     bg: "bg-rose-500/12",
+//     border: "border-rose-400/30",
+//     icon: "text-rose-300",
+//     dot: "bg-rose-400",
+//     hoverGlow: "ring-rose-400/25",
+//   },
+//   pink: {
+//     bg: "bg-pink-500/12",
+//     border: "border-pink-400/30",
+//     icon: "text-pink-300",
+//     dot: "bg-pink-400",
+//     hoverGlow: "ring-pink-400/25",
+//   },
+//   orange: {
+//     bg: "bg-orange-500/12",
+//     border: "border-orange-400/30",
+//     icon: "text-orange-300",
+//     dot: "bg-orange-400",
+//     hoverGlow: "ring-orange-400/25",
+//   },
+//   indigo: {
+//     bg: "bg-indigo-500/12",
+//     border: "border-indigo-400/30",
+//     icon: "text-indigo-300",
+//     dot: "bg-indigo-400",
+//     hoverGlow: "ring-indigo-400/25",
+//   },
+//   purple: {
+//     bg: "bg-purple-500/12",
+//     border: "border-purple-400/30",
+//     icon: "text-purple-300",
+//     dot: "bg-purple-400",
+//     hoverGlow: "ring-purple-400/25",
+//   },
+//   teal: {
+//     bg: "bg-teal-500/12",
+//     border: "border-teal-400/30",
+//     icon: "text-teal-300",
+//     dot: "bg-teal-400",
+//     hoverGlow: "ring-teal-400/25",
+//   },
+//   amber: {
+//     bg: "bg-amber-500/12",
+//     border: "border-amber-400/30",
+//     icon: "text-amber-300",
+//     dot: "bg-amber-400",
+//     hoverGlow: "ring-amber-400/25",
+//   },
+// };
+
+// const MIN_SELECTIONS = 3;
+
+// interface FeatureHighlightProps {
+//   IconComponent: any;
+//   title: string;
+//   description: string;
+//   color: "indigo" | "violet" | "purple";
+// }
+
+// const FeatureHighlight: FC<FeatureHighlightProps> = ({
+//   IconComponent,
+//   title,
+//   description,
+//   color,
+// }) => {
+//   const colorClasses = {
+//     indigo: {
+//       bg: "bg-indigo-500/10 group-hover:bg-indigo-500/15",
+//       border: "border-indigo-500/20",
+//       text: "text-indigo-400",
+//     },
+//     violet: {
+//       bg: "bg-violet-500/10 group-hover:bg-violet-500/15",
+//       border: "border-violet-500/20",
+//       text: "text-violet-400",
+//     },
+//     purple: {
+//       bg: "bg-purple-500/10 group-hover:bg-purple-500/15",
+//       border: "border-purple-500/20",
+//       text: "text-purple-400",
+//     },
+//   };
+//   const classes = colorClasses[color];
+
+//   return (
+//     <div className="flex items-start gap-x-4 group">
+//       <div
+//         className={`mt-1  p-2 rounded-lg border transition-colors ${classes.bg} ${classes.border}`}
+//       >
+//         <IconComponent className={`w-6 h-6 ${classes.text}`} />
+//       </div>
+//       <div>
+//         <h3 className="text-slate-200 font-medium">{title}</h3>
+//         <p className="text-slate-400 text-sm leading-relaxed">{description}</p>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default function OnboardingPage() {
+//   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+//   const router = useRouter();
+
+//   const handleGenreSelect = (genreName: string) => {
+//     setSelectedGenres((prev) =>
+//       prev.includes(genreName)
+//         ? prev.filter((g) => g !== genreName)
+//         : [...prev, genreName]
+//     );
+//   };
+
+//   const handleContinue = () => {
+//     if (selectedGenres.length >= MIN_SELECTIONS) {
+//       localStorage.setItem(
+//         "user_preferred_genres",
+//         JSON.stringify(selectedGenres)
+//       );
+//       router.push("/");
+//     }
+//   };
+
+//   const isContinueDisabled = selectedGenres.length < MIN_SELECTIONS;
+
+//   return (
+//     <main className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+//       {/* Background visuals */}
+//       <div className="absolute inset-0 z-0 overflow-hidden">
+//         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/15 via-transparent to-transparent"></div>
+//         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-violet-900/10 via-transparent to-transparent"></div>
+//         <div className="absolute top-[25%] left-[25%] w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-indigo-600/10 rounded-full blur-3xl animate-pulse"></div>
+//         <div
+//           className="absolute bottom-[25%] right-[25%] w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-violet-600/10 rounded-full blur-3xl animate-pulse"
+//           style={{ animationDelay: "1s" }}
+//         ></div>
+//         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+//       </div>
+
+//       {/* Foreground content */}
+//       <div className="relative z-10 flex w-full max-w-7xl flex-col justify-center px-6 py-16 lg:flex-row lg:items-center lg:gap-12">
+//         <div className="lg:w-5/12 space-y-8">
+//           <div className="space-y-6">
+//             <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+//               <Film className="w-4 h-4 text-indigo-400" />
+//               <span className="text-indigo-300 text-sm font-medium tracking-wider uppercase">
+//                 Step 1 of 2
+//               </span>
+//             </div>
+//             <div>
+//               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold bg-gradient-to-br from-slate-50 via-slate-200 to-slate-400 bg-clip-text text-transparent leading-tight mb-4">
+//                 Explore Movies Curated for You
+//               </h1>
+//               <p className="text-slate-400 text-lg font-light leading-relaxed">
+//                 Select the genres you enjoy most. We'll tailor your home feed
+//                 with intelligent AI recommendations, adapting to your evolving
+//                 tastes.
+//               </p>
+//             </div>
+//           </div>
+
+//           <div className="space-y-4 pt-4">
+//             <FeatureHighlight
+//               IconComponent={Sparkles}
+//               title="Personalized Feed"
+//               description="AI curates movies based on your taste."
+//               color="indigo"
+//             />
+//             <FeatureHighlight
+//               IconComponent={Star}
+//               title="Semantic Search"
+//               description="Find movies with natural language queries."
+//               color="violet"
+//             />
+//             <FeatureHighlight
+//               IconComponent={Film}
+//               title="Smart Recommendations"
+//               description="Get AI-driven suggestions from your feedback."
+//               color="purple"
+//             />
+//           </div>
+//         </div>
+
+//         {/* Genre Selection */}
+//         <div className="lg:w-7/12 mt-12 lg:mt-0">
+//           <div className="space-y-6">
+//             <div className="space-y-2">
+//               <h2 className="text-2xl font-semibold text-slate-200">
+//                 Select Your Favorite Genres
+//               </h2>
+//               <p className="text-slate-400 text-sm">
+//                 Choose at least {MIN_SELECTIONS} genres to get a personalized
+//                 experience.
+//               </p>
+//             </div>
+
+//             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+//               {genres.map((genre) => {
+//                 const isSelected = selectedGenres.includes(genre.name);
+//                 const cls = colorMap[genre.colorKey];
+
+//                 return (
+//                   <button
+//                     key={genre.name}
+//                     onClick={() => handleGenreSelect(genre.name)}
+//                     className={[
+//                       "group relative overflow-hidden rounded-xl px-5 py-4 transition-all duration-300 ease-out flex items-center gap-4 text-left border-2",
+//                       isSelected
+//                         ? `${cls.bg} ${cls.border} shadow-inner ring-1 ${
+//                             cls.hoverGlow ?? ""
+//                           }`
+//                         : "bg-slate-800/30 border-slate-700/40 hover:border-slate-600/60 hover:bg-slate-800/50",
+//                     ].join(" ")}
+//                   >
+//                     <div
+//                       className={`transition-colors duration-200 ${
+//                         isSelected
+//                           ? cls.icon
+//                           : "text-slate-400 group-hover:text-slate-300"
+//                       }`}
+//                     >
+//                       <genre.icon className="w-6 h-6" strokeWidth={2} />
+//                     </div>
+//                     <span
+//                       className={`text-sm sm:text-base font-medium transition-colors duration-200 ${
+//                         isSelected
+//                           ? "text-slate-100"
+//                           : "text-slate-300 group-hover:text-slate-200"
+//                       }`}
+//                     >
+//                       {genre.name}
+//                     </span>
+//                     {isSelected && (
+//                       <div
+//                         className={`ml-auto w-2 h-2 rounded-full ${cls.dot} flex-shrink-0`}
+//                       ></div>
+//                     )}
+//                   </button>
+//                 );
+//               })}
+//             </div>
+
+//             <div className="pt-4">
+//               <button
+//                 onClick={handleContinue}
+//                 disabled={isContinueDisabled}
+//                 className={`w-full relative px-8 py-4 rounded-xl font-semibold text-base tracking-wide transition-all duration-300
+//                   ${
+//                     isContinueDisabled
+//                       ? "bg-slate-800/50 text-slate-500 cursor-not-allowed border-2 border-slate-700/30"
+//                       : "bg-gradient-to-r from-indigo-600 to-indigo-500 text-white border-2 border-indigo-500/50 hover:from-indigo-500 hover:to-indigo-400 active:scale-[0.99]"
+//                   }`}
+//               >
+//                 {isContinueDisabled ? (
+//                   <span>
+//                     Select {MIN_SELECTIONS - selectedGenres.length} more to
+//                     continue
+//                   </span>
+//                 ) : (
+//                   <span className="flex items-center justify-center gap-2">
+//                     Continue to Dashboard
+//                     <svg
+//                       className="w-5 h-5"
+//                       fill="none"
+//                       viewBox="0 0 24 24"
+//                       stroke="currentColor"
+//                       strokeWidth={2.5}
+//                     >
+//                       <path
+//                         strokeLinecap="round"
+//                         strokeLinejoin="round"
+//                         d="M13 7l5 5m0 0l-5 5m5-5H6"
+//                       />
+//                     </svg>
+//                   </span>
+//                 )}
+//               </button>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     </main>
+//   );
+// }
+
