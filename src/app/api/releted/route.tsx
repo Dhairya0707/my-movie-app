@@ -18,19 +18,19 @@ export async function GET(request: Request) {
     }
 
     // // Find movie in local DB
-    // const movie = movies.find((m) => m.movie_id === movieId);
-    // if (!movie) {
-    //   return NextResponse.json({ error: "Movie not found" }, { status: 404 });
-    // }
+    const movie = movies.find((m) => m.movie_id === movieId);
+    if (!movie) {
+      return NextResponse.json({ error: "Movie not found" }, { status: 404 });
+    }
 
     // Generate embedding for this movie
-    // const text = `${movie.genre ?? ""} ${movie.overview ?? ""} ${
-    //   movie.cast ?? ""
-    // }`;
-    const embedding = await genEmbeddingsGemini(movieId);
+    const text = `${movie.genre ?? ""} ${movie.overview ?? ""} ${
+      movie.cast ?? ""
+    }`;
+    const embedding = await genEmbeddingsGemini(text);
 
     // Query Pinecone for top 5-10 related movies
-    const relatedMovies = await queryMoviesByEmbedding(embedding, 15);
+    const relatedMovies = await queryMoviesByEmbedding(embedding, 20);
 
     // Filter out the original movie
     const filteredMovies = relatedMovies.filter((m) => m.movie_id !== movieId);

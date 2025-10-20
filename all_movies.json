@@ -1,4 +1,4 @@
-export const movies = [
+[
     {
         "id":0,
         "movie_id":"tt15354916",

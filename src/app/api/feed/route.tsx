@@ -18,7 +18,7 @@ async function getLikedByGenre(genres: string[]) {
 
   const genreText = genres.join(" ") + " movies";
   const embedding = await genEmbeddingsGemini(genreText);
-  const semanticMovies = await queryMoviesByEmbedding(embedding, 10);
+  const semanticMovies = await queryMoviesByEmbedding(embedding, 20);
 
   const genrePool = movies.filter((m) =>
     m.genre?.split(",").some((g) => genres.includes(g.trim()))
@@ -39,7 +39,7 @@ async function getLikedByLikes(likedMovies: any[]) {
       movie.cast ?? ""
     }`;
     const embedding = await genEmbeddingsGemini(text);
-    return queryMoviesByEmbedding(embedding, 10);
+    return queryMoviesByEmbedding(embedding, 20);
   });
 
   const results = await Promise.all(promises);

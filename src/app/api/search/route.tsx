@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
     const embedding = await genEmbeddingsGemini(query);
 
-    const searchResults = await queryMoviesByEmbedding(embedding, 20);
+    const searchResults = await queryMoviesByEmbedding(embedding, 50);
     return NextResponse.json(searchResults);
   } catch (error: any) {
     return NextResponse.json(

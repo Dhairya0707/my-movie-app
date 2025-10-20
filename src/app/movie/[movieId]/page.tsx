@@ -935,17 +935,15 @@ export default function MoviePage() {
                 <TrendingUp className="w-6 h-6 text-indigo-400" />
                 You Might Also Like
               </h2>
-              <div className="relative">
-                <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent pb-4 -mb-4">
-                  <div className="flex gap-4 w-max">
-                    {relatedMovies.map((rec) => (
-                      <RelatedMovieCard
-                        key={rec.movie_id}
-                        movie={rec}
-                        router={router}
-                      />
-                    ))}
-                  </div>
+              <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-transparent pb-4 -mb-4">
+                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
+                  {relatedMovies.map((rec) => (
+                    <RelatedMovieCard
+                      key={rec.movie_id}
+                      movie={rec}
+                      router={router}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
