@@ -34,6 +34,7 @@ export async function GET(request: Request) {
 
     // Filter out the original movie
     const filteredMovies = relatedMovies.filter((m) => m.movie_id !== movieId);
+    console.log("Getting results for : ", movie.movie_name);
 
     return NextResponse.json(filteredMovies);
   } catch (error: any) {
